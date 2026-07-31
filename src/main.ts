@@ -657,10 +657,31 @@ function updateHeartPickups(deltaTime: number): void {
   for (let index = heartPickups.length - 1; index >= 0; index--) {
     const heart = heartPickups[index];
     const collector = balls.find(
-      (ball) =>
-        ball.lives > 0 &&
-        ball.lives < MAX_LIVES &&
-        circlesOverlap(ball.position, ball.radius, heart.position, heart.radius),
+      (ball) => {
+        const bodyTouchesHeart = circlesOverlap(
+          ball.position,
+          ball.radius,
+          heart.position,
+          heart.radius,
+        );
+        const weaponCenter = ball.weapon
+          ? getEquippedWeaponCenter(ball, ball.weapon.angle)
+          : null;
+        const weaponTouchesHeart = weaponCenter
+          ? circlesOverlap(
+              weaponCenter,
+              EQUIPPED_WEAPON_SIZE * .6,
+              heart.position,
+              heart.radius,
+            )
+          : false;
+
+        return (
+          ball.lives > 0 &&
+          ball.lives < MAX_LIVES &&
+          (bodyTouchesHeart || weaponTouchesHeart)
+        );
+      },
     );
 
     if (collector) {
@@ -991,28 +1012,6 @@ function updateContactWeapons(deltaTime: number): void {
 
     if (config.kind === "knife") {
       const blade = getKnifeBladeSegment(owner, weapon.angle);
-      const targetShield = target.weapon;
-
-      if (targetShield?.type === "shield") {
-        const shieldConfig = WEAPON_CONFIGS[targetShield.type];
-        const shieldCenter = getEquippedWeaponCenter(
-          target,
-          targetShield.angle,
-        );
-
-        if (
-          segmentCircleHitTime(
-            blade.start,
-            blade.end,
-            shieldCenter,
-            shieldConfig.hitRadius + config.hitRadius,
-          ) !== null
-        ) {
-          damageShield(target, 1);
-          owner.weapon = null;
-          continue;
-        }
-      }
 
       if (
         segmentCircleHitTime(
@@ -1022,7 +1021,11 @@ function updateContactWeapons(deltaTime: number): void {
           target.radius + config.hitRadius,
         ) !== null
       ) {
-        applyDamage(target, config.contactDamage);
+        if (target.weapon?.type === "shield") {
+          damageShield(target, 1);
+        } else {
+          applyDamage(target, config.contactDamage);
+        }
         owner.weapon = null;
       }
 
@@ -1039,7 +1042,11 @@ function updateContactWeapons(deltaTime: number): void {
         target.radius,
       )
     ) {
-      applyDamage(target, config.contactDamage);
+      if (target.weapon?.type === "shield") {
+        damageShield(target, 1);
+      } else {
+        applyDamage(target, config.contactDamage);
+      }
       weapon.contactCooldown = config.contactCooldown;
       damageShield(owner, 1);
     }
@@ -1201,29 +1208,6 @@ function getEarliestProjectileHit(
       continue;
     }
 
-    if (target.weapon?.type === "shield") {
-      const shieldConfig = WEAPON_CONFIGS[target.weapon.type];
-      const shieldCenter = getEquippedWeaponCenter(
-        target,
-        target.weapon.angle,
-      );
-
-      const shieldHitTime = segmentCircleHitTime(
-        projectile.previousPosition,
-        projectile.position,
-        shieldCenter,
-        shieldConfig.hitRadius + projectile.radius,
-      );
-
-      if (shieldHitTime !== null) {
-        earliestHit = chooseEarlierProjectileHit(earliestHit, {
-          kind: "shield",
-          time: shieldHitTime,
-          target,
-        });
-      }
-    }
-
     const ballHitTime = segmentCircleHitTime(
       projectile.previousPosition,
       projectile.position,
@@ -1233,7 +1217,7 @@ function getEarliestProjectileHit(
 
     if (ballHitTime !== null) {
       earliestHit = chooseEarlierProjectileHit(earliestHit, {
-        kind: "ball",
+        kind: target.weapon?.type === "shield" ? "shield" : "ball",
         time: ballHitTime,
         target,
       });

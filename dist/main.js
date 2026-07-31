@@ -441,9 +441,18 @@ function updateHeartPickups(deltaTime) {
     }
     for (let index = heartPickups.length - 1; index >= 0; index--) {
         const heart = heartPickups[index];
-        const collector = balls.find((ball) => ball.lives > 0 &&
-            ball.lives < MAX_LIVES &&
-            circlesOverlap(ball.position, ball.radius, heart.position, heart.radius));
+        const collector = balls.find((ball) => {
+            const bodyTouchesHeart = circlesOverlap(ball.position, ball.radius, heart.position, heart.radius);
+            const weaponCenter = ball.weapon
+                ? getEquippedWeaponCenter(ball, ball.weapon.angle)
+                : null;
+            const weaponTouchesHeart = weaponCenter
+                ? circlesOverlap(weaponCenter, EQUIPPED_WEAPON_SIZE * .6, heart.position, heart.radius)
+                : false;
+            return (ball.lives > 0 &&
+                ball.lives < MAX_LIVES &&
+                (bodyTouchesHeart || weaponTouchesHeart));
+        });
         if (collector) {
             collector.lives = Math.min(MAX_LIVES, collector.lives + 2);
             heartPickups.splice(index, 1);
@@ -654,25 +663,25 @@ function updateContactWeapons(deltaTime) {
         }
         if (config.kind === "knife") {
             const blade = getKnifeBladeSegment(owner, weapon.angle);
-            const targetShield = target.weapon;
-            if (targetShield?.type === "shield") {
-                const shieldConfig = WEAPON_CONFIGS[targetShield.type];
-                const shieldCenter = getEquippedWeaponCenter(target, targetShield.angle);
-                if (segmentCircleHitTime(blade.start, blade.end, shieldCenter, shieldConfig.hitRadius + config.hitRadius) !== null) {
-                    damageShield(target, 1);
-                    owner.weapon = null;
-                    continue;
-                }
-            }
             if (segmentCircleHitTime(blade.start, blade.end, target.position, target.radius + config.hitRadius) !== null) {
-                applyDamage(target, config.contactDamage);
+                if (target.weapon?.type === "shield") {
+                    damageShield(target, 1);
+                }
+                else {
+                    applyDamage(target, config.contactDamage);
+                }
                 owner.weapon = null;
             }
             continue;
         }
         const shieldCenter = getEquippedWeaponCenter(owner, weapon.angle);
         if (circlesOverlap(shieldCenter, config.hitRadius, target.position, target.radius)) {
-            applyDamage(target, config.contactDamage);
+            if (target.weapon?.type === "shield") {
+                damageShield(target, 1);
+            }
+            else {
+                applyDamage(target, config.contactDamage);
+            }
             weapon.contactCooldown = config.contactCooldown;
             damageShield(owner, 1);
         }
@@ -783,22 +792,10 @@ function getEarliestProjectileHit(projectile) {
         if (target.id === projectile.ownerId || target.lives <= 0) {
             continue;
         }
-        if (target.weapon?.type === "shield") {
-            const shieldConfig = WEAPON_CONFIGS[target.weapon.type];
-            const shieldCenter = getEquippedWeaponCenter(target, target.weapon.angle);
-            const shieldHitTime = segmentCircleHitTime(projectile.previousPosition, projectile.position, shieldCenter, shieldConfig.hitRadius + projectile.radius);
-            if (shieldHitTime !== null) {
-                earliestHit = chooseEarlierProjectileHit(earliestHit, {
-                    kind: "shield",
-                    time: shieldHitTime,
-                    target,
-                });
-            }
-        }
         const ballHitTime = segmentCircleHitTime(projectile.previousPosition, projectile.position, target.position, target.radius + projectile.radius);
         if (ballHitTime !== null) {
             earliestHit = chooseEarlierProjectileHit(earliestHit, {
-                kind: "ball",
+                kind: target.weapon?.type === "shield" ? "shield" : "ball",
                 time: ballHitTime,
                 target,
             });
