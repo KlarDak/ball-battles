@@ -3,7 +3,7 @@ interface Vector2 {
   y: number;
 }
 
-type BallId = "red" | "blue" | "green" | "yellow";
+type BallId = "red" | "blue" | "green" | "yellow" | "purple" | "orange";
 
 type WeaponType =
   | "assaultRifle"
@@ -306,6 +306,8 @@ const BALL_PRESETS: ReadonlyArray<{ id: BallId; name: string; color: string }> =
   { id: "blue", name: "BLUE", color: "#6495ed" },
   { id: "green", name: "GREEN", color: "#4fcf8b" },
   { id: "yellow", name: "YELLOW", color: "#f2c94c" },
+  { id: "purple", name: "PURPLE", color: "#a879ff" },
+  { id: "orange", name: "ORANGE", color: "#ff8a4c" },
 ];
 
 function createBalls(count: number): Ball[] {
@@ -372,12 +374,15 @@ const WEAPON_TYPES: readonly WeaponType[] = [
   "shield",
 ];
 
+let enabledWeaponTypes: WeaponType[] = [...WEAPON_TYPES];
+let healingEnabled = true;
+
 const weaponPickups: WeaponPickup[] = [];
 const heartPickups: HeartPickup[] = [];
 const projectiles: Projectile[] = [];
 
 const WEAPON_RADIUS = 46;
-const MAX_WEAPON_PICKUPS = 4;
+const MAX_WEAPON_PICKUPS = 6;
 const MIN_SPAWN_DELAY = 1;
 const MAX_SPAWN_DELAY = 2.5;
 
@@ -404,7 +409,13 @@ function randomPointInsideArena(margin: number): Vector2 {
 }
 
 function spawnWeapon(): void {
-  const type = WEAPON_TYPES[Math.floor(Math.random() * WEAPON_TYPES.length)];
+  if (enabledWeaponTypes.length === 0) {
+    return;
+  }
+
+  const type = enabledWeaponTypes[
+    Math.floor(Math.random() * enabledWeaponTypes.length)
+  ];
 
   weaponPickups.push({
     id: nextWeaponId++,
@@ -611,6 +622,11 @@ function updatePickupReminder(deltaTime: number): void {
 }
 
 function updateHeartPickups(deltaTime: number): void {
+  if (!healingEnabled) {
+    heartPickups.length = 0;
+    return;
+  }
+
   for (const heart of heartPickups) {
     heart.pulse += deltaTime * 5;
   }
@@ -1367,7 +1383,12 @@ function showBattleSetup(): void {
 
 startButton?.addEventListener("click", () => {
   const selected = document.querySelector<HTMLInputElement>('input[name="fighters"]:checked');
-  const count = Math.max(2, Math.min(4, Number(selected?.value ?? 2)));
+  const count = Math.max(2, Math.min(6, Number(selected?.value ?? 2)));
+  enabledWeaponTypes = Array.from(
+    document.querySelectorAll<HTMLInputElement>('input[data-weapon]:checked'),
+    (input) => input.dataset.weapon as WeaponType,
+  );
+  healingEnabled = document.querySelector<HTMLInputElement>("#healing")?.checked ?? true;
   startBattle(count);
 });
 
@@ -1643,14 +1664,14 @@ function drawProjectile(projectile: Projectile): void {
 }
 
 function drawLives(ball: Ball, row: number): void {
-  const y = 180 + row * 120;
-  const firstHeartX = 190;
+  const y = 95 + row * 80;
+  const firstHeartX = 180;
   const heartSpacing = 82;
 
-  drawCircle(95, y, 36, ball.color, "#ffffff", 4);
+  drawCircle(95, y, 30, ball.color, "#ffffff", 4);
 
   ctx.save();
-  ctx.font = "64px Arial";
+  ctx.font = "56px Arial";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
 

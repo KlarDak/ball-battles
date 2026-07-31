@@ -183,6 +183,8 @@ const BALL_PRESETS = [
     { id: "blue", name: "BLUE", color: "#6495ed" },
     { id: "green", name: "GREEN", color: "#4fcf8b" },
     { id: "yellow", name: "YELLOW", color: "#f2c94c" },
+    { id: "purple", name: "PURPLE", color: "#a879ff" },
+    { id: "orange", name: "ORANGE", color: "#ff8a4c" },
 ];
 function createBalls(count) {
     const createdBalls = [];
@@ -221,11 +223,13 @@ const WEAPON_TYPES = [
     "knife",
     "shield",
 ];
+let enabledWeaponTypes = [...WEAPON_TYPES];
+let healingEnabled = true;
 const weaponPickups = [];
 const heartPickups = [];
 const projectiles = [];
 const WEAPON_RADIUS = 46;
-const MAX_WEAPON_PICKUPS = 4;
+const MAX_WEAPON_PICKUPS = 6;
 const MIN_SPAWN_DELAY = 1;
 const MAX_SPAWN_DELAY = 2.5;
 let nextWeaponId = 1;
@@ -246,7 +250,10 @@ function randomPointInsideArena(margin) {
     };
 }
 function spawnWeapon() {
-    const type = WEAPON_TYPES[Math.floor(Math.random() * WEAPON_TYPES.length)];
+    if (enabledWeaponTypes.length === 0) {
+        return;
+    }
+    const type = enabledWeaponTypes[Math.floor(Math.random() * enabledWeaponTypes.length)];
     weaponPickups.push({
         id: nextWeaponId++,
         type,
@@ -406,6 +413,10 @@ function updatePickupReminder(deltaTime) {
     }
 }
 function updateHeartPickups(deltaTime) {
+    if (!healingEnabled) {
+        heartPickups.length = 0;
+        return;
+    }
     for (const heart of heartPickups) {
         heart.pulse += deltaTime * 5;
     }
@@ -893,7 +904,9 @@ function showBattleSetup() {
 }
 startButton?.addEventListener("click", () => {
     const selected = document.querySelector('input[name="fighters"]:checked');
-    const count = Math.max(2, Math.min(4, Number(selected?.value ?? 2)));
+    const count = Math.max(2, Math.min(6, Number(selected?.value ?? 2)));
+    enabledWeaponTypes = Array.from(document.querySelectorAll('input[data-weapon]:checked'), (input) => input.dataset.weapon);
+    healingEnabled = document.querySelector("#healing")?.checked ?? true;
     startBattle(count);
 });
 toggleButton?.addEventListener("click", () => {
@@ -1070,12 +1083,12 @@ function drawProjectile(projectile) {
     ctx.restore();
 }
 function drawLives(ball, row) {
-    const y = 180 + row * 120;
-    const firstHeartX = 190;
+    const y = 95 + row * 80;
+    const firstHeartX = 180;
     const heartSpacing = 82;
-    drawCircle(95, y, 36, ball.color, "#ffffff", 4);
+    drawCircle(95, y, 30, ball.color, "#ffffff", 4);
     ctx.save();
-    ctx.font = "64px Arial";
+    ctx.font = "56px Arial";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     for (let index = 0; index < MAX_LIVES; index++) {
