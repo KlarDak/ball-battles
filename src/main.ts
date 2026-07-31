@@ -163,6 +163,7 @@ const WEAPON_CONFIGS = {
 } satisfies Record<WeaponType, WeaponConfig>;
 
 let audioContext: AudioContext | null = null;
+const noiseBufferCache = new Map<number, AudioBuffer>();
 
 function enableAudio(): void {
   audioContext ??= new AudioContext();
@@ -170,6 +171,26 @@ function enableAudio(): void {
   if (audioContext.state === "suspended") {
     void audioContext.resume();
   }
+}
+
+function getNoiseBuffer(audio: AudioContext, duration: number): AudioBuffer {
+  const cacheKey = Math.round(duration * 1000);
+  const cached = noiseBufferCache.get(cacheKey);
+
+  if (cached) {
+    return cached;
+  }
+
+  const sampleCount = Math.max(1, Math.floor(audio.sampleRate * duration));
+  const buffer = audio.createBuffer(1, sampleCount, audio.sampleRate);
+  const data = buffer.getChannelData(0);
+
+  for (let index = 0; index < sampleCount; index++) {
+    data[index] = (Math.random() * 2 - 1) * (1 - index / sampleCount);
+  }
+
+  noiseBufferCache.set(cacheKey, buffer);
+  return buffer;
 }
 
 function playShotSound(type: WeaponType): void {
@@ -203,17 +224,9 @@ function playShotSound(type: WeaponType): void {
   oscillator.start(now);
   oscillator.stop(now + setting.duration);
 
-  const sampleCount = Math.max(1, Math.floor(audio.sampleRate * setting.duration));
-  const noiseBuffer = audio.createBuffer(1, sampleCount, audio.sampleRate);
-  const noiseData = noiseBuffer.getChannelData(0);
-
-  for (let index = 0; index < sampleCount; index++) {
-    noiseData[index] = (Math.random() * 2 - 1) * (1 - index / sampleCount);
-  }
-
   const noise = audio.createBufferSource();
   const noiseGain = audio.createGain();
-  noise.buffer = noiseBuffer;
+  noise.buffer = getNoiseBuffer(audio, setting.duration);
   noiseGain.gain.setValueAtTime(setting.volume * (type === "shotgun" ? 1.5 : .65), now);
   noiseGain.gain.exponentialRampToValueAtTime(.001, now + setting.duration);
   noise.connect(noiseGain).connect(audio.destination);
@@ -285,16 +298,9 @@ function playDamageSound(): void {
   oscillator.start(now);
   oscillator.stop(now + .13);
 
-  const buffer = audio.createBuffer(1, Math.floor(audio.sampleRate * .07), audio.sampleRate);
-  const data = buffer.getChannelData(0);
-
-  for (let index = 0; index < data.length; index++) {
-    data[index] = (Math.random() * 2 - 1) * (1 - index / data.length);
-  }
-
   const noise = audio.createBufferSource();
   const noiseGain = audio.createGain();
-  noise.buffer = buffer;
+  noise.buffer = getNoiseBuffer(audio, .07);
   noiseGain.gain.setValueAtTime(.075, now);
   noiseGain.gain.exponentialRampToValueAtTime(.001, now + .07);
   noise.connect(noiseGain).connect(audio.destination);
@@ -1340,7 +1346,7 @@ function getCanvas(selector: string): HTMLCanvasElement {
 }
 
 function getContext2D(canvas: HTMLCanvasElement): CanvasRenderingContext2D {
-  const context = canvas.getContext("2d");
+  const context = canvas.getContext("2d", { alpha: false });
 
   if (!context) {
     throw new Error("Canvas 2D is unavailable!");
@@ -1351,6 +1357,16 @@ function getContext2D(canvas: HTMLCanvasElement): CanvasRenderingContext2D {
 
 const canvas = getCanvas("#game");
 const ctx = getContext2D(canvas);
+const WORLD_WIDTH = 1080;
+const WORLD_HEIGHT = 1920;
+const MOBILE_MODE = window.matchMedia(
+  "(pointer: coarse) and (max-width: 900px)",
+).matches;
+const RENDER_SCALE = MOBILE_MODE ? 2 / 3 : 1;
+
+canvas.width = Math.round(WORLD_WIDTH * RENDER_SCALE);
+canvas.height = Math.round(WORLD_HEIGHT * RENDER_SCALE);
+ctx.setTransform(RENDER_SCALE, 0, 0, RENDER_SCALE, 0, 0);
 const toggleButton = document.querySelector<HTMLButtonElement>("#toggle");
 const restartButton = document.querySelector<HTMLButtonElement>("#restart");
 const startButton = document.querySelector<HTMLButtonElement>("#start");
@@ -1686,7 +1702,7 @@ function drawLives(ball: Ball, row: number): void {
 
 function render(): void {
   ctx.fillStyle = "#090b20";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
 
   drawCircle(
     arena.center.x,
@@ -1738,7 +1754,7 @@ function render(): void {
   if (winner) {
     ctx.save();
     ctx.fillStyle = "rgba(3, 4, 12, .76)";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
     ctx.textAlign = "center";
     ctx.fillStyle = winner.color;
     ctx.font = "900 76px Arial";
@@ -1820,7 +1836,7 @@ function resolveBallCollision(first: Ball, second: Ball): void {
   second.velocity.y += impulse * ny;
 }
 
-const FIXED_STEP = 1 / 120;
+const FIXED_STEP = MOBILE_MODE ? 1 / 60 : 1 / 120;
 
 let previousTime = performance.now();
 let accumulator = 0;

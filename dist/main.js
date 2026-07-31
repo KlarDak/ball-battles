@@ -65,11 +65,27 @@ const WEAPON_CONFIGS = {
     },
 };
 let audioContext = null;
+const noiseBufferCache = new Map();
 function enableAudio() {
     audioContext ??= new AudioContext();
     if (audioContext.state === "suspended") {
         void audioContext.resume();
     }
+}
+function getNoiseBuffer(audio, duration) {
+    const cacheKey = Math.round(duration * 1000);
+    const cached = noiseBufferCache.get(cacheKey);
+    if (cached) {
+        return cached;
+    }
+    const sampleCount = Math.max(1, Math.floor(audio.sampleRate * duration));
+    const buffer = audio.createBuffer(1, sampleCount, audio.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let index = 0; index < sampleCount; index++) {
+        data[index] = (Math.random() * 2 - 1) * (1 - index / sampleCount);
+    }
+    noiseBufferCache.set(cacheKey, buffer);
+    return buffer;
 }
 function playShotSound(type) {
     const audio = audioContext;
@@ -97,15 +113,9 @@ function playShotSound(type) {
     oscillator.connect(oscillatorGain).connect(audio.destination);
     oscillator.start(now);
     oscillator.stop(now + setting.duration);
-    const sampleCount = Math.max(1, Math.floor(audio.sampleRate * setting.duration));
-    const noiseBuffer = audio.createBuffer(1, sampleCount, audio.sampleRate);
-    const noiseData = noiseBuffer.getChannelData(0);
-    for (let index = 0; index < sampleCount; index++) {
-        noiseData[index] = (Math.random() * 2 - 1) * (1 - index / sampleCount);
-    }
     const noise = audio.createBufferSource();
     const noiseGain = audio.createGain();
-    noise.buffer = noiseBuffer;
+    noise.buffer = getNoiseBuffer(audio, setting.duration);
     noiseGain.gain.setValueAtTime(setting.volume * (type === "shotgun" ? 1.5 : .65), now);
     noiseGain.gain.exponentialRampToValueAtTime(.001, now + setting.duration);
     noise.connect(noiseGain).connect(audio.destination);
@@ -165,14 +175,9 @@ function playDamageSound() {
     oscillator.connect(gain).connect(audio.destination);
     oscillator.start(now);
     oscillator.stop(now + .13);
-    const buffer = audio.createBuffer(1, Math.floor(audio.sampleRate * .07), audio.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let index = 0; index < data.length; index++) {
-        data[index] = (Math.random() * 2 - 1) * (1 - index / data.length);
-    }
     const noise = audio.createBufferSource();
     const noiseGain = audio.createGain();
-    noise.buffer = buffer;
+    noise.buffer = getNoiseBuffer(audio, .07);
     noiseGain.gain.setValueAtTime(.075, now);
     noiseGain.gain.exponentialRampToValueAtTime(.001, now + .07);
     noise.connect(noiseGain).connect(audio.destination);
@@ -868,7 +873,7 @@ function getCanvas(selector) {
     return element;
 }
 function getContext2D(canvas) {
-    const context = canvas.getContext("2d");
+    const context = canvas.getContext("2d", { alpha: false });
     if (!context) {
         throw new Error("Canvas 2D is unavailable!");
     }
@@ -876,6 +881,13 @@ function getContext2D(canvas) {
 }
 const canvas = getCanvas("#game");
 const ctx = getContext2D(canvas);
+const WORLD_WIDTH = 1080;
+const WORLD_HEIGHT = 1920;
+const MOBILE_MODE = window.matchMedia("(pointer: coarse) and (max-width: 900px)").matches;
+const RENDER_SCALE = MOBILE_MODE ? 2 / 3 : 1;
+canvas.width = Math.round(WORLD_WIDTH * RENDER_SCALE);
+canvas.height = Math.round(WORLD_HEIGHT * RENDER_SCALE);
+ctx.setTransform(RENDER_SCALE, 0, 0, RENDER_SCALE, 0, 0);
 const toggleButton = document.querySelector("#toggle");
 const restartButton = document.querySelector("#restart");
 const startButton = document.querySelector("#start");
@@ -1099,7 +1111,7 @@ function drawLives(ball, row) {
 }
 function render() {
     ctx.fillStyle = "#090b20";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
     drawCircle(arena.center.x, arena.center.y, arena.radius, "#10142c", "#ffffff", 8);
     drawArenaGrid();
     for (const heart of heartPickups) {
@@ -1127,7 +1139,7 @@ function render() {
     if (winner) {
         ctx.save();
         ctx.fillStyle = "rgba(3, 4, 12, .76)";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
         ctx.textAlign = "center";
         ctx.fillStyle = winner.color;
         ctx.font = "900 76px Arial";
@@ -1186,7 +1198,7 @@ function resolveBallCollision(first, second) {
     second.velocity.x += impulse * nx;
     second.velocity.y += impulse * ny;
 }
-const FIXED_STEP = 1 / 120;
+const FIXED_STEP = MOBILE_MODE ? 1 / 60 : 1 / 120;
 let previousTime = performance.now();
 let accumulator = 0;
 function gameLoop(currentTime) {
