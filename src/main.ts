@@ -64,6 +64,7 @@ interface Ball {
   radius: number;
   color: string;
   lives: number;
+  hurtTimer: number;
   weapon: EquippedWeapon | null;
 }
 
@@ -161,6 +162,145 @@ const WEAPON_CONFIGS = {
   },
 } satisfies Record<WeaponType, WeaponConfig>;
 
+let audioContext: AudioContext | null = null;
+
+function enableAudio(): void {
+  audioContext ??= new AudioContext();
+
+  if (audioContext.state === "suspended") {
+    void audioContext.resume();
+  }
+}
+
+function playShotSound(type: WeaponType): void {
+  const audio = audioContext;
+
+  if (!audio || audio.state !== "running") {
+    return;
+  }
+
+  const now = audio.currentTime;
+  const settings = {
+    assaultRifle: { frequency: 135, duration: .065, volume: .09 },
+    uzi: { frequency: 190, duration: .04, volume: .065 },
+    pistol: { frequency: 115, duration: .11, volume: .13 },
+    shotgun: { frequency: 75, duration: .18, volume: .18 },
+  } as const;
+
+  if (type === "knife" || type === "shield") {
+    return;
+  }
+
+  const setting = settings[type];
+  const oscillator = audio.createOscillator();
+  const oscillatorGain = audio.createGain();
+  oscillator.type = type === "uzi" ? "square" : "sawtooth";
+  oscillator.frequency.setValueAtTime(setting.frequency, now);
+  oscillator.frequency.exponentialRampToValueAtTime(45, now + setting.duration);
+  oscillatorGain.gain.setValueAtTime(setting.volume, now);
+  oscillatorGain.gain.exponentialRampToValueAtTime(.001, now + setting.duration);
+  oscillator.connect(oscillatorGain).connect(audio.destination);
+  oscillator.start(now);
+  oscillator.stop(now + setting.duration);
+
+  const sampleCount = Math.max(1, Math.floor(audio.sampleRate * setting.duration));
+  const noiseBuffer = audio.createBuffer(1, sampleCount, audio.sampleRate);
+  const noiseData = noiseBuffer.getChannelData(0);
+
+  for (let index = 0; index < sampleCount; index++) {
+    noiseData[index] = (Math.random() * 2 - 1) * (1 - index / sampleCount);
+  }
+
+  const noise = audio.createBufferSource();
+  const noiseGain = audio.createGain();
+  noise.buffer = noiseBuffer;
+  noiseGain.gain.setValueAtTime(setting.volume * (type === "shotgun" ? 1.5 : .65), now);
+  noiseGain.gain.exponentialRampToValueAtTime(.001, now + setting.duration);
+  noise.connect(noiseGain).connect(audio.destination);
+  noise.start(now);
+}
+
+function playPickupReminderSound(): void {
+  const audio = audioContext;
+
+  if (!audio || audio.state !== "running") {
+    return;
+  }
+
+  const now = audio.currentTime;
+
+  for (const [index, frequency] of [660, 880].entries()) {
+    const start = now + index * .09;
+    const oscillator = audio.createOscillator();
+    const gain = audio.createGain();
+    oscillator.type = "sine";
+    oscillator.frequency.setValueAtTime(frequency, start);
+    gain.gain.setValueAtTime(.055, start);
+    gain.gain.exponentialRampToValueAtTime(.001, start + .16);
+    oscillator.connect(gain).connect(audio.destination);
+    oscillator.start(start);
+    oscillator.stop(start + .16);
+  }
+}
+
+function playHealSound(): void {
+  const audio = audioContext;
+
+  if (!audio || audio.state !== "running") {
+    return;
+  }
+
+  const now = audio.currentTime;
+
+  for (const [index, frequency] of [523, 659, 784].entries()) {
+    const start = now + index * .075;
+    const oscillator = audio.createOscillator();
+    const gain = audio.createGain();
+    oscillator.type = "sine";
+    oscillator.frequency.setValueAtTime(frequency, start);
+    gain.gain.setValueAtTime(.07, start);
+    gain.gain.exponentialRampToValueAtTime(.001, start + .22);
+    oscillator.connect(gain).connect(audio.destination);
+    oscillator.start(start);
+    oscillator.stop(start + .22);
+  }
+}
+
+function playDamageSound(): void {
+  const audio = audioContext;
+
+  if (!audio || audio.state !== "running") {
+    return;
+  }
+
+  const now = audio.currentTime;
+  const oscillator = audio.createOscillator();
+  const gain = audio.createGain();
+  oscillator.type = "triangle";
+  oscillator.frequency.setValueAtTime(105, now);
+  oscillator.frequency.exponentialRampToValueAtTime(52, now + .12);
+  gain.gain.setValueAtTime(.12, now);
+  gain.gain.exponentialRampToValueAtTime(.001, now + .13);
+  oscillator.connect(gain).connect(audio.destination);
+  oscillator.start(now);
+  oscillator.stop(now + .13);
+
+  const buffer = audio.createBuffer(1, Math.floor(audio.sampleRate * .07), audio.sampleRate);
+  const data = buffer.getChannelData(0);
+
+  for (let index = 0; index < data.length; index++) {
+    data[index] = (Math.random() * 2 - 1) * (1 - index / data.length);
+  }
+
+  const noise = audio.createBufferSource();
+  const noiseGain = audio.createGain();
+  noise.buffer = buffer;
+  noiseGain.gain.setValueAtTime(.075, now);
+  noiseGain.gain.exponentialRampToValueAtTime(.001, now + .07);
+  noise.connect(noiseGain).connect(audio.destination);
+  noise.start(now);
+}
+
 const BALL_PRESETS: ReadonlyArray<{ id: BallId; name: string; color: string }> = [
   { id: "red", name: "RED", color: "#e72c58" },
   { id: "blue", name: "BLUE", color: "#6495ed" },
@@ -187,7 +327,7 @@ function createBalls(count: number): Ball[] {
     }
 
     const movementAngle = Math.random() * Math.PI * 2;
-    const speed = randomBetween(270, 390);
+    const speed = randomBetween(330, 450);
 
     createdBalls.push({
       ...preset,
@@ -198,6 +338,7 @@ function createBalls(count: number): Ball[] {
       },
       radius,
       lives: MAX_LIVES,
+      hurtTimer: 0,
       weapon: null,
     });
   }
@@ -215,6 +356,13 @@ interface WeaponPickup {
   angle: number;
 }
 
+interface HeartPickup {
+  id: number;
+  position: Vector2;
+  radius: number;
+  pulse: number;
+}
+
 const WEAPON_TYPES: readonly WeaponType[] = [
   "assaultRifle",
   "uzi",
@@ -225,6 +373,7 @@ const WEAPON_TYPES: readonly WeaponType[] = [
 ];
 
 const weaponPickups: WeaponPickup[] = [];
+const heartPickups: HeartPickup[] = [];
 const projectiles: Projectile[] = [];
 
 const WEAPON_RADIUS = 46;
@@ -233,8 +382,11 @@ const MIN_SPAWN_DELAY = 1;
 const MAX_SPAWN_DELAY = 2.5;
 
 let nextWeaponId = 1;
+let nextHeartId = 1;
 let nextProjectileId = 1;
 let weaponSpawnTimer = randomBetween(MIN_SPAWN_DELAY, MAX_SPAWN_DELAY);
+let pickupReminderTimer = 0;
+let heartSpawnTimer = randomBetween(4, 7);
 
 function randomBetween(minimum: number, maximum: number): number {
   return minimum + Math.random() * (maximum - minimum);
@@ -444,6 +596,59 @@ function updateWeaponSpawner(deltaTime: number): void {
   weaponSpawnTimer = randomBetween(MIN_SPAWN_DELAY, MAX_SPAWN_DELAY);
 }
 
+function updatePickupReminder(deltaTime: number): void {
+  if (weaponPickups.length === 0) {
+    pickupReminderTimer = 0;
+    return;
+  }
+
+  pickupReminderTimer -= deltaTime;
+
+  if (pickupReminderTimer <= 0) {
+    playPickupReminderSound();
+    pickupReminderTimer = 1.1;
+  }
+}
+
+function updateHeartPickups(deltaTime: number): void {
+  for (const heart of heartPickups) {
+    heart.pulse += deltaTime * 5;
+  }
+
+  if (!balls.some((ball) => ball.lives > 0 && ball.lives < MAX_LIVES)) {
+    heartSpawnTimer = Math.max(heartSpawnTimer, 2);
+    return;
+  }
+
+  heartSpawnTimer -= deltaTime;
+
+  if (heartSpawnTimer <= 0 && heartPickups.length < 2) {
+    heartPickups.push({
+      id: nextHeartId++,
+      position: randomPointInsideArena(42),
+      radius: 34,
+      pulse: Math.random() * Math.PI * 2,
+    });
+    heartSpawnTimer = randomBetween(5, 9);
+  }
+
+  for (let index = heartPickups.length - 1; index >= 0; index--) {
+    const heart = heartPickups[index];
+    const collector = balls.find(
+      (ball) =>
+        ball.lives > 0 &&
+        ball.lives < MAX_LIVES &&
+        circlesOverlap(ball.position, ball.radius, heart.position, heart.radius),
+    );
+
+    if (collector) {
+      collector.lives = Math.min(MAX_LIVES, collector.lives + 2);
+      heartPickups.splice(index, 1);
+      playHealSound();
+    }
+  }
+}
+
 function circlesOverlap(
   firstPosition: Vector2,
   firstRadius: number,
@@ -601,6 +806,8 @@ function fireWeapon(
   weapon: EquippedWeapon,
   config: RangedWeaponConfig,
 ): void {
+  playShotSound(weapon.type);
+
   for (const pelletAngle of config.pelletAngles) {
     spawnProjectile(owner, weapon.angle + pelletAngle, config);
   }
@@ -1029,6 +1236,8 @@ function applyDamage(target: Ball, damage: number): void {
   }
 
   target.lives = Math.max(0, target.lives - damage);
+  target.hurtTimer = .32;
+  playDamageSound();
 
   console.info(
     `${target.id} took ${damage} damage; ${target.lives} lives remain`,
@@ -1108,7 +1317,7 @@ function getCanvas(selector: string): HTMLCanvasElement {
   const element = document.querySelector(selector);
 
   if (!(element instanceof HTMLCanvasElement)) {
-    throw new Error(`Canvas ${selector} не найден!`);
+    throw new Error(`Canvas ${selector} was not found!`);
   }
 
   return element;
@@ -1118,7 +1327,7 @@ function getContext2D(canvas: HTMLCanvasElement): CanvasRenderingContext2D {
   const context = canvas.getContext("2d");
 
   if (!context) {
-    throw new Error("Canvas 2D недоступен!");
+    throw new Error("Canvas 2D is unavailable!");
   }
 
   return context;
@@ -1134,16 +1343,20 @@ const setupPanel = document.querySelector<HTMLElement>("#setup");
 let paused = true;
 
 function startBattle(count: number): void {
+  enableAudio();
   balls.splice(0, balls.length, ...createBalls(count));
   weaponPickups.length = 0;
+  heartPickups.length = 0;
   projectiles.length = 0;
   weaponSpawnTimer = .35;
+  pickupReminderTimer = 0;
+  heartSpawnTimer = randomBetween(4, 7);
   accumulator = 0;
   paused = false;
   setupPanel?.setAttribute("hidden", "");
   if (toggleButton) {
-    toggleButton.textContent = "Пауза";
-    toggleButton.setAttribute("aria-label", "Поставить бой на паузу");
+    toggleButton.textContent = "Pause";
+    toggleButton.setAttribute("aria-label", "Put the fight on pause");
   }
 }
 
@@ -1160,10 +1373,10 @@ startButton?.addEventListener("click", () => {
 
 toggleButton?.addEventListener("click", () => {
   paused = !paused;
-  toggleButton.textContent = paused ? "Продолжить" : "Пауза";
+  toggleButton.textContent = paused ? "Continue" : "Pause";
   toggleButton.setAttribute(
     "aria-label",
-    paused ? "Продолжить бой" : "Поставить бой на паузу",
+    paused ? "Continue the fight" : "Put the fight on pause",
   );
 });
 
@@ -1198,6 +1411,7 @@ function update(deltaTime: number): void {
       continue;
     }
 
+    ball.hurtTimer = Math.max(0, ball.hurtTimer - deltaTime);
     ball.position.x += ball.velocity.x * deltaTime;
     ball.position.y += ball.velocity.y * deltaTime;
   }
@@ -1221,6 +1435,8 @@ function update(deltaTime: number): void {
   }
 
   updateWeaponSpawner(deltaTime);
+  updatePickupReminder(deltaTime);
+  updateHeartPickups(deltaTime);
   collectWeaponPickups();
   updateWeaponAiming();
   updateContactWeapons(deltaTime);
@@ -1257,12 +1473,30 @@ function drawFace(ball: Ball): void {
   ctx.save();
   const eyeOffset = ball.radius * .32;
   const eyeY = ball.position.y - ball.radius * .12;
-  drawCircle(ball.position.x - eyeOffset, eyeY, 7, "#fff", "#fff", 0);
-  drawCircle(ball.position.x + eyeOffset, eyeY, 7, "#fff", "#fff", 0);
-
   ctx.strokeStyle = "#fff";
   ctx.lineWidth = 6;
   ctx.lineCap = "round";
+
+  if (ball.hurtTimer > 0) {
+    for (const direction of [-1, 1]) {
+      const eyeX = ball.position.x + eyeOffset * direction;
+      ctx.beginPath();
+      ctx.moveTo(eyeX - 7, eyeY - 7);
+      ctx.lineTo(eyeX + 7, eyeY + 7);
+      ctx.moveTo(eyeX + 7, eyeY - 7);
+      ctx.lineTo(eyeX - 7, eyeY + 7);
+      ctx.stroke();
+    }
+
+    ctx.beginPath();
+    ctx.arc(ball.position.x, ball.position.y + 20, 13, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+    return;
+  }
+
+  drawCircle(ball.position.x - eyeOffset, eyeY, 7, "#fff", "#fff", 0);
+  drawCircle(ball.position.x + eyeOffset, eyeY, 7, "#fff", "#fff", 0);
 
   if (ball.weapon) {
     ctx.beginPath();
@@ -1287,6 +1521,29 @@ function drawFace(ball: Ball): void {
     ctx.stroke();
   }
 
+  ctx.restore();
+}
+
+function drawHeartPickup(heart: HeartPickup): void {
+  const scale = 1 + Math.sin(heart.pulse) * .1;
+
+  ctx.save();
+  ctx.translate(heart.position.x, heart.position.y);
+  ctx.scale(scale, scale);
+  ctx.shadowColor = "#ff5277";
+  ctx.shadowBlur = 28;
+  ctx.fillStyle = "#ff416c";
+  ctx.strokeStyle = "#fff";
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(0, 28);
+  ctx.bezierCurveTo(-8, 18, -34, 3, -34, -15);
+  ctx.bezierCurveTo(-34, -38, -8, -44, 0, -25);
+  ctx.bezierCurveTo(8, -44, 34, -38, 34, -15);
+  ctx.bezierCurveTo(34, 3, 8, 18, 0, 28);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
   ctx.restore();
 }
 
@@ -1420,6 +1677,10 @@ function render(): void {
   );
   drawArenaGrid();
 
+  for (const heart of heartPickups) {
+    drawHeartPickup(heart);
+  }
+
   for (const pickup of weaponPickups) {
     drawWeaponPickup(pickup);
   }
@@ -1463,7 +1724,7 @@ function render(): void {
     ctx.fillText(`${winner.name} WINS`, 540, 930);
     ctx.fillStyle = "#fff";
     ctx.font = "600 28px Arial";
-    ctx.fillText("Нажмите «Новый бой», чтобы сыграть снова", 540, 990);
+    ctx.fillText("Click “New battle” to play again", 540, 990);
     ctx.restore();
   }
 }

@@ -1,11 +1,12 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#060817">
-    <meta name="description" content="Автономная арена: два шара, оружие и физика столкновений.">
+    <meta name="description" content="Autonomous browser ball battle simulation">
     <title>Ball Battles</title>
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="./styles.css">
     <script type="module" src="./dist/main.js"></script>
 </head>
@@ -15,26 +16,26 @@
             <span class="eyebrow">AUTO BATTLE / 01</span>
             <h1>Ball Battles</h1>
         </header>
-        <section class="stage" aria-label="Симуляция боя">
-            <canvas id="game" width="1080" height="1920" aria-label="Crimson Red против Cornflower Blue"></canvas>
+        <section class="stage" aria-label="Battle simulation">
+            <canvas id="game" width="1080" height="1920" aria-label="Autonomous ball battle arena"></canvas>
             <div class="setup" id="setup">
                 <div class="setup-card">
-                    <span class="eyebrow">НАСТРОЙКА БОЯ</span>
-                    <h2>Сколько бойцов?</h2>
-                    <div class="fighter-options" role="group" aria-label="Количество бойцов">
+                    <span class="eyebrow">BATTLE SETUP</span>
+                    <h2>How many fighters?</h2>
+                    <div class="fighter-options" role="group" aria-label="Number of fighters">
                         <label><input type="radio" name="fighters" value="2" checked><span>2</span></label>
                         <label><input type="radio" name="fighters" value="3"><span>3</span></label>
                         <label><input type="radio" name="fighters" value="4"><span>4</span></label>
                     </div>
-                    <button class="start-button" id="start" type="button">Начать бой</button>
+                    <button class="start-button" id="start" type="button">Start battle</button>
                 </div>
             </div>
             <div class="controls">
-                <button id="toggle" type="button" aria-label="Поставить бой на паузу">Пауза</button>
-                <button id="restart" type="button">Новый бой</button>
+                <button id="toggle" type="button" aria-label="Pause the battle">Pause</button>
+                <button id="restart" type="button">New battle</button>
             </div>
         </section>
-        <p class="hint">Шары сражаются сами · оружие появляется случайно</p>
+        <p class="hint">The balls fight automatically · weapons spawn randomly</p>
     </main>
 </body>
 </html>
