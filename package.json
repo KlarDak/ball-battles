@@ -1,0 +1,18 @@
+{
+  "name": "ball-battles",
+  "version": "1.0.0",
+  "main": "server.js",
+  "scripts": {
+    "build": "tsc",
+    "check": "tsc --noEmit",
+    "start": "npm run build && node --env-file-if-exists=.env server.js",
+    "serve": "node --env-file-if-exists=.env server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "Autonomous browser ball battle simulation",
+  "devDependencies": {
+    "typescript": "^7.0.2"
+  }
+}
