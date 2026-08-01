@@ -71,6 +71,7 @@ export interface EquippedWeapon {
   shotsRemaining: number;
   contactCooldown: number;
   durability: number | null;
+  targetRefreshTimer: number;
 }
 
 export interface Ball {

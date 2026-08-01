@@ -380,6 +380,24 @@ function drawKnifeIcon() {
     ctx.fillRect(-44, -9, 31, 18);
 }
 function drawShieldIcon(accentColor) {
+    ctx.save();
+    ctx.fillStyle = accentColor;
+    fillPolygon([
+        { x: 27, y: -29 },
+        { x: 52, y: -19 },
+        { x: 31, y: -8 },
+    ]);
+    fillPolygon([
+        { x: 31, y: -9 },
+        { x: 55, y: 0 },
+        { x: 31, y: 10 },
+    ]);
+    fillPolygon([
+        { x: 30, y: 9 },
+        { x: 49, y: 21 },
+        { x: 24, y: 28 },
+    ]);
+    ctx.restore();
     ctx.beginPath();
     ctx.moveTo(0, -43);
     ctx.lineTo(34, -29);
@@ -395,6 +413,12 @@ function drawShieldIcon(accentColor) {
     ctx.strokeStyle = accentColor;
     ctx.lineWidth = 5;
     ctx.stroke();
+    ctx.fillStyle = accentColor;
+    for (const y of [-21, 0, 21]) {
+        ctx.beginPath();
+        ctx.arc(15, y, 4, 0, Math.PI * 2);
+        ctx.fill();
+    }
 }
 function drawWeaponIcon(type, x, y, size, angle, fillColor = "#111322", accentColor = "#f2c94c") {
     ctx.save();
@@ -499,22 +523,35 @@ function circlesOverlap(firstPosition, firstRadius, secondPosition, secondRadius
     const combinedRadius = firstRadius + secondRadius;
     return dx * dx + dy * dy <= combinedRadius * combinedRadius;
 }
-function chooseRandomTarget(owner) {
+function isOpponent(owner: Ball, candidate: Ball): boolean {
+    return candidate.id !== owner.id &&
+        candidate.lives > 0 &&
+        !(isTeamBasedMode() && owner.team !== null && candidate.team === owner.team);
+}
+function chooseNearestTarget(owner: Ball): Ball | null {
     const candidates = balls.filter((ball) => ball.id !== owner.id &&
-        ball.lives > 0 &&
-        !(isTeamBasedMode() &&
-            owner.team !== null &&
-            ball.team === owner.team));
+        isOpponent(owner, ball));
     if (candidates.length === 0) {
         return null;
     }
-    return candidates[Math.floor(Math.random() * candidates.length)] ?? null;
+    let nearest = candidates[0] ?? null;
+    let nearestDistanceSquared = Number.POSITIVE_INFINITY;
+    for (const candidate of candidates) {
+        const dx = candidate.position.x - owner.position.x;
+        const dy = candidate.position.y - owner.position.y;
+        const distanceSquared = dx * dx + dy * dy;
+        if (distanceSquared < nearestDistanceSquared) {
+            nearest = candidate;
+            nearestDistanceSquared = distanceSquared;
+        }
+    }
+    return nearest;
 }
 function angleBetween(from, to) {
     return Math.atan2(to.y - from.y, to.x - from.x);
 }
 function createEquippedWeapon(owner: Ball, type: WeaponType, fallbackAngle: number): EquippedWeapon {
-    const target = chooseRandomTarget(owner);
+    const target = chooseNearestTarget(owner);
     const config = WEAPON_CONFIGS[type];
     return {
         type,
@@ -527,6 +564,7 @@ function createEquippedWeapon(owner: Ball, type: WeaponType, fallbackAngle: numb
         shotsRemaining: config.kind === "ranged" ? config.burstCount : 0,
         contactCooldown: 0,
         durability: config.kind === "shield" ? config.durability : null,
+        targetRefreshTimer: randomBetween(.8, 1.4),
     };
 }
 function collectWeaponPickups() {
@@ -551,18 +589,20 @@ function collectWeaponPickups() {
         }
     }
 }
-function updateWeaponAiming() {
+function updateWeaponAiming(deltaTime: number) {
     for (const owner of balls) {
         const weapon = owner.weapon;
         if (!weapon || owner.lives <= 0) {
             continue;
         }
+        weapon.targetRefreshTimer -= deltaTime;
         let target = weapon.targetId === null
             ? null
             : balls.find((ball) => ball.id === weapon.targetId) ?? null;
-        if (!target || target.lives <= 0 || target.id === owner.id) {
-            target = chooseRandomTarget(owner);
+        if (!target || !isOpponent(owner, target) || weapon.targetRefreshTimer <= 0) {
+            target = chooseNearestTarget(owner);
             weapon.targetId = target?.id ?? null;
+            weapon.targetRefreshTimer = randomBetween(.8, 1.4);
         }
         if (target) {
             weapon.angle = angleBetween(owner.position, target.position);
@@ -700,24 +740,51 @@ function updateContactWeapons(deltaTime) {
         }
         if (config.kind === "knife") {
             const blade = getKnifeBladeSegment(owner, weapon.angle);
-            if (segmentCircleHitTime(blade.start, blade.end, target.position, target.radius + config.hitRadius) !== null) {
-                if (target.weapon?.type === "shield") {
-                    damageShield(target, 1);
+            let struckBall: Ball | null = null;
+            let earliestHitTime = Number.POSITIVE_INFINITY;
+            for (const candidate of balls) {
+                if (!isOpponent(owner, candidate)) {
+                    continue;
+                }
+                const hitTime = segmentCircleHitTime(blade.start, blade.end, candidate.position, candidate.radius + config.hitRadius);
+                if (hitTime !== null && hitTime < earliestHitTime) {
+                    struckBall = candidate;
+                    earliestHitTime = hitTime;
+                }
+            }
+            if (struckBall) {
+                if (struckBall.weapon?.type === "shield") {
+                    damageShield(struckBall, 1);
                 }
                 else {
-                    applyDamage(target, config.contactDamage);
+                    applyDamage(struckBall, config.contactDamage);
                 }
                 owner.weapon = null;
             }
             continue;
         }
         const shieldCenter = getEquippedWeaponCenter(owner, weapon.angle);
-        if (circlesOverlap(shieldCenter, config.hitRadius, target.position, target.radius)) {
-            if (target.weapon?.type === "shield") {
-                damageShield(target, 1);
+        let struckBall: Ball | null = null;
+        let nearestDistanceSquared = Number.POSITIVE_INFINITY;
+        for (const candidate of balls) {
+            if (!isOpponent(owner, candidate) ||
+                !circlesOverlap(shieldCenter, config.hitRadius, candidate.position, candidate.radius)) {
+                continue;
+            }
+            const dx = candidate.position.x - shieldCenter.x;
+            const dy = candidate.position.y - shieldCenter.y;
+            const distanceSquared = dx * dx + dy * dy;
+            if (distanceSquared < nearestDistanceSquared) {
+                struckBall = candidate;
+                nearestDistanceSquared = distanceSquared;
+            }
+        }
+        if (struckBall) {
+            if (struckBall.weapon?.type === "shield") {
+                damageShield(struckBall, 1);
             }
             else {
-                applyDamage(target, config.contactDamage);
+                applyDamage(struckBall, config.contactDamage);
             }
             weapon.contactCooldown = config.contactCooldown;
             damageShield(owner, 1);
@@ -1098,7 +1165,7 @@ function update(deltaTime) {
     updatePickupReminder(deltaTime);
     updateHeartPickups(deltaTime);
     collectWeaponPickups();
-    updateWeaponAiming();
+    updateWeaponAiming(deltaTime);
     updateContactWeapons(deltaTime);
     updateRangedWeapons(deltaTime);
     updateProjectiles(deltaTime);
