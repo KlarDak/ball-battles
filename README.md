@@ -39,6 +39,13 @@ npm run serve
 ## Mechanics
 
 - At the beginning of the game, between two and six balls can be selected;
+- Classic free-for-all and evenly matched two-team battle modes are available;
+- In team mode, friendly targeting and friendly fire are disabled;
+- Melee Only limits weapon spawns to knives and shields;
+- Chaos increases fighter speed and item spawn frequency;
+- Regen restores one health point every three seconds;
+- Shrinking Arena gradually reduces the playable area;
+- Boss Battle pits one larger fighter with 30 health against all challengers;
 - Individual weapon types and healing hearts can be enabled or disabled before the battle;
 - The balls move and collide elastically inside a circular arena;
 - Assault rifles, Uzis, shotguns, pistols, knives, and shields randomly appear in the arena;
@@ -50,11 +57,10 @@ npm run serve
 
 Another developer can integrate the game into an existing website without using the included Node.js server:
 
-1. Copy `src/main.ts` into the project's source directory.
+1. Run `npm run build` and copy `dist/ball-battles.js` into the target project.
 2. Copy the game-related markup from `index.html`, including the `#game` canvas, setup panel, and control buttons.
 3. Copy the relevant styles from `styles.css`.
-4. Compile `src/main.ts` with TypeScript or include it in the project's existing build pipeline.
-5. Make sure the compiled JavaScript is loaded as an ES module after the required HTML elements are available.
+4. Load the bundle after the required HTML elements are available: `<script defer src="./ball-battles.js"></script>`.
 
 The script expects a `1080 × 1920` canvas with the ID `game`, as well as elements with the IDs `setup`, `start`, `toggle`, and `restart`. The canvas is scaled responsively through CSS, so its internal resolution should remain unchanged. Audio is generated with the browser's Web Audio API and requires no external sound files.
 

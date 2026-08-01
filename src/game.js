@@ -1,10 +1,12 @@
 "use strict";
+const BASE_ARENA_RADIUS = 500;
+const MIN_ARENA_RADIUS = 285;
 const arena = {
     center: {
         x: 540,
         y: 1050,
     },
-    radius: 500,
+    radius: BASE_ARENA_RADIUS,
 };
 const MAX_LIVES = 10;
 const EQUIPPED_WEAPON_SIZE = 92;
@@ -191,10 +193,12 @@ const BALL_PRESETS = [
     { id: "purple", name: "PURPLE", color: "#a879ff" },
     { id: "orange", name: "ORANGE", color: "#ff8a4c" },
 ];
-function createBalls(count) {
+function createBalls(count, mode = "classic") {
     const createdBalls = [];
-    for (const preset of BALL_PRESETS.slice(0, count)) {
-        const radius = 52;
+    for (const [index, preset] of BALL_PRESETS.slice(0, count).entries()) {
+        const isBoss = mode === "boss" && index === 0;
+        const radius = isBoss ? 82 : 52;
+        const maxLives = isBoss ? 30 : MAX_LIVES;
         let position = randomPointInsideArena(radius + 45);
         let attempts = 0;
         while (createdBalls.some((ball) => circlesOverlap(position, radius + 55, ball.position, ball.radius)) &&
@@ -203,17 +207,32 @@ function createBalls(count) {
             attempts += 1;
         }
         const movementAngle = Math.random() * Math.PI * 2;
-        const speed = randomBetween(330, 450);
+        const speed = isBoss
+            ? randomBetween(260, 340)
+            : mode === "chaos"
+                ? randomBetween(500, 650)
+                : randomBetween(330, 450);
         createdBalls.push({
             ...preset,
+            team: mode === "teams"
+                ? index % 2 === 0
+                    ? "red"
+                    : "blue"
+                : mode === "boss"
+                    ? isBoss
+                        ? "red"
+                        : "blue"
+                    : null,
             position,
             velocity: {
                 x: Math.cos(movementAngle) * speed,
                 y: Math.sin(movementAngle) * speed,
             },
             radius,
-            lives: MAX_LIVES,
+            lives: maxLives,
+            maxLives,
             hurtTimer: 0,
+            regenTimer: 3,
             weapon: null,
         });
     }
@@ -230,6 +249,7 @@ const WEAPON_TYPES = [
 ];
 let enabledWeaponTypes = [...WEAPON_TYPES];
 let healingEnabled = true;
+let gameMode = "classic";
 const weaponPickups = [];
 const heartPickups = [];
 const projectiles = [];
@@ -245,6 +265,14 @@ let pickupReminderTimer = 0;
 let heartSpawnTimer = randomBetween(4, 7);
 function randomBetween(minimum, maximum) {
     return minimum + Math.random() * (maximum - minimum);
+}
+function getWeaponSpawnDelay() {
+    return gameMode === "chaos"
+        ? randomBetween(.3, .7)
+        : randomBetween(MIN_SPAWN_DELAY, MAX_SPAWN_DELAY);
+}
+function isTeamBasedMode(mode = gameMode) {
+    return mode === "teams" || mode === "boss";
 }
 function randomPointInsideArena(margin) {
     const angle = Math.random() * Math.PI * 2;
@@ -404,7 +432,7 @@ function updateWeaponSpawner(deltaTime) {
     if (weaponPickups.length < MAX_WEAPON_PICKUPS) {
         spawnWeapon();
     }
-    weaponSpawnTimer = randomBetween(MIN_SPAWN_DELAY, MAX_SPAWN_DELAY);
+    weaponSpawnTimer = getWeaponSpawnDelay();
 }
 function updatePickupReminder(deltaTime) {
     if (weaponPickups.length === 0) {
@@ -425,7 +453,7 @@ function updateHeartPickups(deltaTime) {
     for (const heart of heartPickups) {
         heart.pulse += deltaTime * 5;
     }
-    if (!balls.some((ball) => ball.lives > 0 && ball.lives < MAX_LIVES)) {
+    if (!balls.some((ball) => ball.lives > 0 && ball.lives < ball.maxLives)) {
         heartSpawnTimer = Math.max(heartSpawnTimer, 2);
         return;
     }
@@ -437,7 +465,8 @@ function updateHeartPickups(deltaTime) {
             radius: 34,
             pulse: Math.random() * Math.PI * 2,
         });
-        heartSpawnTimer = randomBetween(5, 9);
+        heartSpawnTimer =
+            gameMode === "chaos" ? randomBetween(2, 4) : randomBetween(5, 9);
     }
     for (let index = heartPickups.length - 1; index >= 0; index--) {
         const heart = heartPickups[index];
@@ -450,11 +479,11 @@ function updateHeartPickups(deltaTime) {
                 ? circlesOverlap(weaponCenter, EQUIPPED_WEAPON_SIZE * .6, heart.position, heart.radius)
                 : false;
             return (ball.lives > 0 &&
-                ball.lives < MAX_LIVES &&
+                ball.lives < ball.maxLives &&
                 (bodyTouchesHeart || weaponTouchesHeart));
         });
         if (collector) {
-            collector.lives = Math.min(MAX_LIVES, collector.lives + 2);
+            collector.lives = Math.min(collector.maxLives, collector.lives + 2);
             heartPickups.splice(index, 1);
             playHealSound();
         }
@@ -467,7 +496,11 @@ function circlesOverlap(firstPosition, firstRadius, secondPosition, secondRadius
     return dx * dx + dy * dy <= combinedRadius * combinedRadius;
 }
 function chooseRandomTarget(owner) {
-    const candidates = balls.filter((ball) => ball.id !== owner.id && ball.lives > 0);
+    const candidates = balls.filter((ball) => ball.id !== owner.id &&
+        ball.lives > 0 &&
+        !(isTeamBasedMode() &&
+            owner.team !== null &&
+            ball.team === owner.team));
     if (candidates.length === 0) {
         return null;
     }
@@ -788,8 +821,13 @@ function getArenaExitTime(projectile) {
 }
 function getEarliestProjectileHit(projectile) {
     let earliestHit = null;
+    const owner = balls.find((ball) => ball.id === projectile.ownerId) ?? null;
     for (const target of balls) {
-        if (target.id === projectile.ownerId || target.lives <= 0) {
+        if (target.id === projectile.ownerId ||
+            target.lives <= 0 ||
+            (isTeamBasedMode() &&
+                owner?.team !== null &&
+                target.team === owner?.team)) {
             continue;
         }
         const ballHitTime = segmentCircleHitTime(projectile.previousPosition, projectile.position, target.position, target.radius + projectile.radius);
@@ -829,7 +867,11 @@ function applyDamage(target, damage) {
     }
 }
 function isBattleOver() {
-    return balls.filter((ball) => ball.lives > 0).length <= 1;
+    const livingBalls = balls.filter((ball) => ball.lives > 0);
+    if (!isTeamBasedMode()) {
+        return livingBalls.length <= 1;
+    }
+    return new Set(livingBalls.map((ball) => ball.team)).size <= 1;
 }
 function resolveProjectileCollisions() {
     while (true) {
@@ -889,10 +931,15 @@ const toggleButton = document.querySelector("#toggle");
 const restartButton = document.querySelector("#restart");
 const startButton = document.querySelector("#start");
 const setupPanel = document.querySelector("#setup");
+const battleTypeLabel = document.querySelector("#battle-type");
+const modeInputs = document.querySelectorAll('input[name="mode"]');
+const fighterInputs = document.querySelectorAll('input[name="fighters"]');
+const weaponInputs = document.querySelectorAll('input[data-weapon]');
 let paused = true;
 function startBattle(count) {
     enableAudio();
-    balls.splice(0, balls.length, ...createBalls(count));
+    arena.radius = BASE_ARENA_RADIUS;
+    balls.splice(0, balls.length, ...createBalls(count, gameMode));
     weaponPickups.length = 0;
     heartPickups.length = 0;
     projectiles.length = 0;
@@ -911,10 +958,55 @@ function showBattleSetup() {
     paused = true;
     setupPanel?.removeAttribute("hidden");
 }
+function syncBattleModeControls() {
+    const selectedMode = document.querySelector('input[name="mode"]:checked')?.value ??
+        "classic";
+    const teamModeSelected = selectedMode === "teams";
+    const meleeModeSelected = selectedMode === "melee";
+    const modeLabels = {
+        classic: "AUTO BATTLE / 01",
+        teams: "TEAM BATTLE / 02",
+        melee: "MELEE ONLY / 03",
+        chaos: "CHAOS / 04",
+        regen: "REGEN / 05",
+        shrinking: "SHRINKING ARENA / 06",
+        boss: "BOSS BATTLE / 07",
+    };
+    if (battleTypeLabel) {
+        battleTypeLabel.textContent = modeLabels[selectedMode];
+    }
+    for (const input of fighterInputs) {
+        const fighterCount = Number(input.value);
+        input.disabled = teamModeSelected && fighterCount % 2 !== 0;
+    }
+    for (const input of weaponInputs) {
+        const meleeWeapon = input.dataset.weapon === "knife" || input.dataset.weapon === "shield";
+        input.disabled = meleeModeSelected && !meleeWeapon;
+    }
+    const selectedFighters = document.querySelector('input[name="fighters"]:checked');
+    if (selectedFighters?.disabled) {
+        const replacement = Array.from(fighterInputs).find((input) => !input.disabled && Number(input.value) > Number(selectedFighters.value)) ?? Array.from(fighterInputs).find((input) => !input.disabled);
+        if (replacement) {
+            replacement.checked = true;
+        }
+    }
+}
+for (const input of modeInputs) {
+    input.addEventListener("change", syncBattleModeControls);
+}
+syncBattleModeControls();
 startButton?.addEventListener("click", () => {
     const selected = document.querySelector('input[name="fighters"]:checked');
-    const count = Math.max(2, Math.min(6, Number(selected?.value ?? 2)));
+    gameMode = (document.querySelector('input[name="mode"]:checked')?.value ??
+        "classic");
+    const selectedCount = Math.max(2, Math.min(6, Number(selected?.value ?? 2)));
+    const count = gameMode === "teams" && selectedCount % 2 !== 0
+        ? Math.min(6, selectedCount + 1)
+        : selectedCount;
     enabledWeaponTypes = Array.from(document.querySelectorAll('input[data-weapon]:checked'), (input) => input.dataset.weapon);
+    if (gameMode === "melee") {
+        enabledWeaponTypes = ["knife", "shield"];
+    }
     healingEnabled = document.querySelector("#healing")?.checked ?? true;
     startBattle(count);
 });
@@ -933,10 +1025,49 @@ function drawCircle(x, y, radius, fill, stroke, lineWidth) {
     ctx.lineWidth = lineWidth;
     ctx.stroke();
 }
+function updateModeEffects(deltaTime) {
+    if (gameMode === "shrinking") {
+        arena.radius = Math.max(MIN_ARENA_RADIUS, arena.radius - deltaTime * 11);
+        for (let index = weaponPickups.length - 1; index >= 0; index--) {
+            const pickup = weaponPickups[index];
+            const distance = Math.hypot(pickup.position.x - arena.center.x, pickup.position.y - arena.center.y);
+            if (distance + pickup.radius > arena.radius) {
+                weaponPickups.splice(index, 1);
+            }
+        }
+        for (let index = heartPickups.length - 1; index >= 0; index--) {
+            const heart = heartPickups[index];
+            const distance = Math.hypot(heart.position.x - arena.center.x, heart.position.y - arena.center.y);
+            if (distance + heart.radius > arena.radius) {
+                heartPickups.splice(index, 1);
+            }
+        }
+    }
+    if (gameMode !== "regen") {
+        return;
+    }
+    let healedAnyBall = false;
+    for (const ball of balls) {
+        if (ball.lives <= 0 || ball.lives >= ball.maxLives) {
+            ball.regenTimer = 3;
+            continue;
+        }
+        ball.regenTimer -= deltaTime;
+        if (ball.regenTimer <= 0) {
+            ball.lives = Math.min(ball.maxLives, ball.lives + 1);
+            ball.regenTimer = 3;
+            healedAnyBall = true;
+        }
+    }
+    if (healedAnyBall) {
+        playHealSound();
+    }
+}
 function update(deltaTime) {
     if (isBattleOver()) {
         return;
     }
+    updateModeEffects(deltaTime);
     for (const ball of balls) {
         if (ball.lives <= 0) {
             continue;
@@ -1095,14 +1226,22 @@ function drawLives(ball, row) {
     const y = 95 + row * 80;
     const firstHeartX = 180;
     const heartSpacing = 82;
+    if (isTeamBasedMode() && ball.team) {
+        ctx.beginPath();
+        ctx.arc(95, y, 37, 0, Math.PI * 2);
+        ctx.strokeStyle = ball.team === "red" ? "#ff466f" : "#5d8cff";
+        ctx.lineWidth = 6;
+        ctx.stroke();
+    }
     drawCircle(95, y, 30, ball.color, "#ffffff", 4);
     ctx.save();
     ctx.font = "56px Arial";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
+    const displayedLives = Math.ceil((ball.lives / ball.maxLives) * MAX_LIVES);
     for (let index = 0; index < MAX_LIVES; index++) {
-        ctx.fillStyle = index < ball.lives ? ball.color : "#292d47";
-        ctx.fillText("♥", firstHeartX + index * heartSpacing, y);
+        ctx.fillStyle = index < displayedLives ? ball.color : "#292d47";
+        ctx.fillText("\u2665", firstHeartX + index * heartSpacing, y);
     }
     ctx.restore();
 }
@@ -1124,6 +1263,13 @@ function render() {
         if (ball.lives <= 0) {
             continue;
         }
+        if (isTeamBasedMode() && ball.team) {
+            ctx.beginPath();
+            ctx.arc(ball.position.x, ball.position.y, ball.radius + 9, 0, Math.PI * 2);
+            ctx.strokeStyle = ball.team === "red" ? "#ff466f" : "#5d8cff";
+            ctx.lineWidth = 7;
+            ctx.stroke();
+        }
         drawCircle(ball.position.x, ball.position.y, ball.radius, ball.color, "#ffffff", 5);
         drawFace(ball);
         drawEquippedWeapon(ball);
@@ -1132,18 +1278,35 @@ function render() {
         drawLives(ball, index);
     });
     const livingBalls = balls.filter((ball) => ball.lives > 0);
-    const winner = livingBalls.length === 1 ? livingBalls[0] : null;
-    if (winner) {
+    const winner = gameMode === "classic" && livingBalls.length === 1
+        ? livingBalls[0]
+        : null;
+    const livingTeams = new Set(livingBalls.map((ball) => ball.team));
+    const winningTeam = isTeamBasedMode() && livingBalls.length > 0 && livingTeams.size === 1
+        ? livingBalls[0].team
+        : null;
+    if (winner || winningTeam) {
+        const victoryText = winner
+            ? `${winner.name} WINS`
+            : gameMode === "boss"
+                ? winningTeam === "red"
+                    ? "BOSS WINS"
+                    : "CHALLENGERS WIN"
+                : `${winningTeam?.toUpperCase()} TEAM WINS`;
         ctx.save();
         ctx.fillStyle = "rgba(3, 4, 12, .76)";
         ctx.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
         ctx.textAlign = "center";
-        ctx.fillStyle = winner.color;
+        ctx.fillStyle = winner
+            ? winner.color
+            : winningTeam === "red"
+                ? "#ff466f"
+                : "#5d8cff";
         ctx.font = "900 76px Arial";
-        ctx.fillText(`${winner.name} WINS`, 540, 930);
+        ctx.fillText(victoryText, 540, 930);
         ctx.fillStyle = "#fff";
         ctx.font = "600 28px Arial";
-        ctx.fillText("Click “New battle” to play again", 540, 990);
+        ctx.fillText("Click «New battle» to play again", 540, 990);
         ctx.restore();
     }
 }

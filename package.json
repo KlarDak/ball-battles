@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "main": "server.js",
   "scripts": {
-    "build": "tsc",
+    "build": "npm run check && esbuild src/main.ts --bundle --format=iife --target=es2022 --sourcemap --outfile=dist/ball-battles.js",
+    "build:watch": "esbuild src/main.ts --bundle --format=iife --target=es2022 --sourcemap --outfile=dist/ball-battles.js --watch",
     "check": "tsc --noEmit",
     "start": "npm run build && node --env-file-if-exists=.env server.js",
     "serve": "node --env-file-if-exists=.env server.js"
@@ -13,6 +14,7 @@
   "license": "ISC",
   "description": "Autonomous browser ball battle simulation",
   "devDependencies": {
+    "esbuild": "^0.25.8",
     "typescript": "^7.0.2"
   }
 }

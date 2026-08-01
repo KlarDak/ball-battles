@@ -8,12 +8,12 @@
     <title>Ball Battles</title>
     <link rel="icon" href="./favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="./styles.css">
-    <script type="module" src="./dist/main.js"></script>
+    <script defer src="./dist/ball-battles.js"></script>
 </head>
 <body>
     <main class="game-shell">
         <header class="brand">
-            <span class="eyebrow">AUTO BATTLE / 01</span>
+            <span class="eyebrow" id="battle-type">AUTO BATTLE / 01</span>
             <h1>Ball Battles</h1>
         </header>
         <section class="stage" aria-label="Battle simulation">
@@ -21,6 +21,16 @@
             <div class="setup" id="setup">
                 <div class="setup-card">
                     <span class="eyebrow">BATTLE SETUP</span>
+                    <h3 class="rules-title first-rule-title">Game mode</h3>
+                    <div class="fighter-options mode-options" role="group" aria-label="Game mode">
+                        <label><input type="radio" name="mode" value="classic" checked><span>Classic / 01</span></label>
+                        <label><input type="radio" name="mode" value="teams"><span>Teams / 02</span></label>
+                        <label><input type="radio" name="mode" value="melee"><span>Melee / 03</span></label>
+                        <label><input type="radio" name="mode" value="chaos"><span>Chaos / 04</span></label>
+                        <label><input type="radio" name="mode" value="regen"><span>Regen / 05</span></label>
+                        <label><input type="radio" name="mode" value="shrinking"><span>Shrinking / 06</span></label>
+                        <label><input type="radio" name="mode" value="boss"><span>Boss / 07</span></label>
+                    </div>
                     <h2>How many fighters?</h2>
                     <div class="fighter-options" role="group" aria-label="Number of fighters">
                         <label><input type="radio" name="fighters" value="2" checked><span>2</span></label>
@@ -29,16 +39,18 @@
                         <label><input type="radio" name="fighters" value="5"><span>5</span></label>
                         <label><input type="radio" name="fighters" value="6"><span>6</span></label>
                     </div>
-                    <h3 class="rules-title">Weapons and pickups</h3>
-                    <div class="rule-options">
-                        <label><input type="checkbox" data-weapon="assaultRifle" checked><span>Assault rifle</span></label>
-                        <label><input type="checkbox" data-weapon="uzi" checked><span>Uzi</span></label>
-                        <label><input type="checkbox" data-weapon="shotgun" checked><span>Shotgun</span></label>
-                        <label><input type="checkbox" data-weapon="pistol" checked><span>Pistol</span></label>
-                        <label><input type="checkbox" data-weapon="knife" checked><span>Knife</span></label>
-                        <label><input type="checkbox" data-weapon="shield" checked><span>Shield</span></label>
-                        <label class="healing-option"><input id="healing" type="checkbox" checked><span>Healing hearts</span></label>
-                    </div>
+                    <details class="rules-disclosure">
+                        <summary>Weapons and pickups</summary>
+                        <div class="rule-options">
+                            <label><input type="checkbox" data-weapon="assaultRifle" checked><span>Assault rifle</span></label>
+                            <label><input type="checkbox" data-weapon="uzi" checked><span>Uzi</span></label>
+                            <label><input type="checkbox" data-weapon="shotgun" checked><span>Shotgun</span></label>
+                            <label><input type="checkbox" data-weapon="pistol" checked><span>Pistol</span></label>
+                            <label><input type="checkbox" data-weapon="knife" checked><span>Knife</span></label>
+                            <label><input type="checkbox" data-weapon="shield" checked><span>Shield</span></label>
+                            <label class="healing-option"><input id="healing" type="checkbox" checked><span>Healing hearts</span></label>
+                        </div>
+                    </details>
                     <button class="start-button" id="start" type="button">Start battle</button>
                 </div>
             </div>

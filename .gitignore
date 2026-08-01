@@ -4,3 +4,7 @@ npm-debug.log*
 .env
 output/
 tmp/
+dist/*.js
+!dist/ball-battles.js
+dist/*.js.map
+!dist/ball-battles.js.map
