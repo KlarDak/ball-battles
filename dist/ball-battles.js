@@ -1,6 +1,6 @@
 "use strict";
 (() => {
-  // src/game.js
+  // src/game.ts
   var BASE_ARENA_RADIUS = 500;
   var MIN_ARENA_RADIUS = 285;
   var arena = {
@@ -1211,7 +1211,7 @@
       drawLives(ball, index);
     });
     const livingBalls = balls.filter((ball) => ball.lives > 0);
-    const winner = gameMode === "classic" && livingBalls.length === 1 ? livingBalls[0] : null;
+    const winner = !isTeamBasedMode() && livingBalls.length === 1 ? livingBalls[0] : null;
     const livingTeams = new Set(livingBalls.map((ball) => ball.team));
     const winningTeam = isTeamBasedMode() && livingBalls.length > 0 && livingTeams.size === 1 ? livingBalls[0].team : null;
     if (winner || winningTeam) {

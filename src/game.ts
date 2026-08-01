@@ -1,7 +1,11 @@
 "use strict";
+import type {
+    Arena, Ball, BallId, EquippedWeapon, GameMode, HeartPickup, Projectile,
+    ProjectileHit, Vector2, WeaponPickup, WeaponType,
+} from "./types";
 const BASE_ARENA_RADIUS = 500;
 const MIN_ARENA_RADIUS = 285;
-const arena = {
+const arena: Arena = {
     center: {
         x: 540,
         y: 1050,
@@ -65,9 +69,9 @@ const WEAPON_CONFIGS = {
         hitRadius: 42,
         durability: SHIELD_DURABILITY,
     },
-};
-let audioContext = null;
-const noiseBufferCache = new Map();
+} as const;
+let audioContext: AudioContext | null = null;
+const noiseBufferCache = new Map<number, AudioBuffer>();
 function enableAudio() {
     audioContext ??= new AudioContext();
     if (audioContext.state === "suspended") {
@@ -185,7 +189,7 @@ function playDamageSound() {
     noise.connect(noiseGain).connect(audio.destination);
     noise.start(now);
 }
-const BALL_PRESETS = [
+const BALL_PRESETS: ReadonlyArray<{ id: BallId; name: string; color: string }> = [
     { id: "red", name: "RED", color: "#e72c58" },
     { id: "blue", name: "BLUE", color: "#6495ed" },
     { id: "green", name: "GREEN", color: "#4fcf8b" },
@@ -193,8 +197,8 @@ const BALL_PRESETS = [
     { id: "purple", name: "PURPLE", color: "#a879ff" },
     { id: "orange", name: "ORANGE", color: "#ff8a4c" },
 ];
-function createBalls(count, mode = "classic") {
-    const createdBalls = [];
+function createBalls(count: number, mode: GameMode = "classic"): Ball[] {
+    const createdBalls: Ball[] = [];
     for (const [index, preset] of BALL_PRESETS.slice(0, count).entries()) {
         const isBoss = mode === "boss" && index === 0;
         const radius = isBoss ? 82 : 52;
@@ -238,8 +242,8 @@ function createBalls(count, mode = "classic") {
     }
     return createdBalls;
 }
-const balls = createBalls(2);
-const WEAPON_TYPES = [
+const balls: Ball[] = createBalls(2);
+const WEAPON_TYPES: readonly WeaponType[] = [
     "assaultRifle",
     "uzi",
     "shotgun",
@@ -247,12 +251,12 @@ const WEAPON_TYPES = [
     "knife",
     "shield",
 ];
-let enabledWeaponTypes = [...WEAPON_TYPES];
+let enabledWeaponTypes: WeaponType[] = [...WEAPON_TYPES];
 let healingEnabled = true;
-let gameMode = "classic";
-const weaponPickups = [];
-const heartPickups = [];
-const projectiles = [];
+let gameMode: GameMode = "classic";
+const weaponPickups: WeaponPickup[] = [];
+const heartPickups: HeartPickup[] = [];
+const projectiles: Projectile[] = [];
 const WEAPON_RADIUS = 46;
 const MAX_WEAPON_PICKUPS = 6;
 const MIN_SPAWN_DELAY = 1;
@@ -509,7 +513,7 @@ function chooseRandomTarget(owner) {
 function angleBetween(from, to) {
     return Math.atan2(to.y - from.y, to.x - from.x);
 }
-function createEquippedWeapon(owner, type, fallbackAngle) {
+function createEquippedWeapon(owner: Ball, type: WeaponType, fallbackAngle: number): EquippedWeapon {
     const target = chooseRandomTarget(owner);
     const config = WEAPON_CONFIGS[type];
     return {
@@ -762,7 +766,7 @@ function segmentCircleHitTime(start, end, center, radius) {
     }
     return null;
 }
-function getProjectileHitPriority(hit) {
+function getProjectileHitPriority(hit: ProjectileHit): number {
     switch (hit.kind) {
         case "shield":
             return 0;
@@ -772,7 +776,7 @@ function getProjectileHitPriority(hit) {
             return 2;
     }
 }
-function chooseEarlierProjectileHit(current, candidate) {
+function chooseEarlierProjectileHit(current: ProjectileHit | null, candidate: ProjectileHit): ProjectileHit {
     if (!current) {
         return candidate;
     }
@@ -819,8 +823,8 @@ function getArenaExitTime(projectile) {
         (2 * a);
     return Math.max(0, Math.min(1, exitTime));
 }
-function getEarliestProjectileHit(projectile) {
-    let earliestHit = null;
+function getEarliestProjectileHit(projectile: Projectile): ProjectileHit | null {
+    let earliestHit: ProjectileHit | null = null;
     const owner = balls.find((ball) => ball.id === projectile.ownerId) ?? null;
     for (const target of balls) {
         if (target.id === projectile.ownerId ||
@@ -875,7 +879,7 @@ function isBattleOver() {
 }
 function resolveProjectileCollisions() {
     while (true) {
-        let nextCollision = null;
+        let nextCollision: { projectile: Projectile; hit: ProjectileHit } | null = null;
         for (const projectile of projectiles) {
             const hit = getEarliestProjectileHit(projectile);
             if (hit &&
@@ -927,14 +931,14 @@ const RENDER_SCALE = MOBILE_MODE ? 2 / 3 : 1;
 canvas.width = Math.round(WORLD_WIDTH * RENDER_SCALE);
 canvas.height = Math.round(WORLD_HEIGHT * RENDER_SCALE);
 ctx.setTransform(RENDER_SCALE, 0, 0, RENDER_SCALE, 0, 0);
-const toggleButton = document.querySelector("#toggle");
-const restartButton = document.querySelector("#restart");
-const startButton = document.querySelector("#start");
+const toggleButton = document.querySelector<HTMLButtonElement>("#toggle");
+const restartButton = document.querySelector<HTMLButtonElement>("#restart");
+const startButton = document.querySelector<HTMLButtonElement>("#start");
 const setupPanel = document.querySelector("#setup");
 const battleTypeLabel = document.querySelector("#battle-type");
-const modeInputs = document.querySelectorAll('input[name="mode"]');
-const fighterInputs = document.querySelectorAll('input[name="fighters"]');
-const weaponInputs = document.querySelectorAll('input[data-weapon]');
+const modeInputs = document.querySelectorAll<HTMLInputElement>('input[name="mode"]');
+const fighterInputs = document.querySelectorAll<HTMLInputElement>('input[name="fighters"]');
+const weaponInputs = document.querySelectorAll<HTMLInputElement>('input[data-weapon]');
 let paused = true;
 function startBattle(count) {
     enableAudio();
@@ -959,7 +963,7 @@ function showBattleSetup() {
     setupPanel?.removeAttribute("hidden");
 }
 function syncBattleModeControls() {
-    const selectedMode = document.querySelector('input[name="mode"]:checked')?.value ??
+    const selectedMode = document.querySelector<HTMLInputElement>('input[name="mode"]:checked')?.value as GameMode ??
         "classic";
     const teamModeSelected = selectedMode === "teams";
     const meleeModeSelected = selectedMode === "melee";
@@ -983,7 +987,7 @@ function syncBattleModeControls() {
         const meleeWeapon = input.dataset.weapon === "knife" || input.dataset.weapon === "shield";
         input.disabled = meleeModeSelected && !meleeWeapon;
     }
-    const selectedFighters = document.querySelector('input[name="fighters"]:checked');
+    const selectedFighters = document.querySelector<HTMLInputElement>('input[name="fighters"]:checked');
     if (selectedFighters?.disabled) {
         const replacement = Array.from(fighterInputs).find((input) => !input.disabled && Number(input.value) > Number(selectedFighters.value)) ?? Array.from(fighterInputs).find((input) => !input.disabled);
         if (replacement) {
@@ -996,18 +1000,18 @@ for (const input of modeInputs) {
 }
 syncBattleModeControls();
 startButton?.addEventListener("click", () => {
-    const selected = document.querySelector('input[name="fighters"]:checked');
-    gameMode = (document.querySelector('input[name="mode"]:checked')?.value ??
-        "classic");
+    const selected = document.querySelector<HTMLInputElement>('input[name="fighters"]:checked');
+    gameMode = (document.querySelector<HTMLInputElement>('input[name="mode"]:checked')?.value ??
+        "classic") as GameMode;
     const selectedCount = Math.max(2, Math.min(6, Number(selected?.value ?? 2)));
     const count = gameMode === "teams" && selectedCount % 2 !== 0
         ? Math.min(6, selectedCount + 1)
         : selectedCount;
-    enabledWeaponTypes = Array.from(document.querySelectorAll('input[data-weapon]:checked'), (input) => input.dataset.weapon);
+    enabledWeaponTypes = Array.from(document.querySelectorAll<HTMLInputElement>('input[data-weapon]:checked'), (input) => input.dataset.weapon as WeaponType);
     if (gameMode === "melee") {
         enabledWeaponTypes = ["knife", "shield"];
     }
-    healingEnabled = document.querySelector("#healing")?.checked ?? true;
+    healingEnabled = document.querySelector<HTMLInputElement>("#healing")?.checked ?? true;
     startBattle(count);
 });
 toggleButton?.addEventListener("click", () => {
@@ -1278,7 +1282,7 @@ function render() {
         drawLives(ball, index);
     });
     const livingBalls = balls.filter((ball) => ball.lives > 0);
-    const winner = gameMode === "classic" && livingBalls.length === 1
+    const winner = !isTeamBasedMode() && livingBalls.length === 1
         ? livingBalls[0]
         : null;
     const livingTeams = new Set(livingBalls.map((ball) => ball.team));
@@ -1374,4 +1378,3 @@ function gameLoop(currentTime) {
     requestAnimationFrame(gameLoop);
 }
 requestAnimationFrame(gameLoop);
-//# sourceMappingURL=main.js.map
