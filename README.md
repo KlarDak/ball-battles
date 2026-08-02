@@ -4,6 +4,8 @@ A simple browser game based on battles between two or more balls using different
 
 Created based on videos from the [@3d_animation_1610](https://www.instagram.com/3d_animation_1610/) account.
 
+Test the game here: [https://wwbt-blog.ru/sandbox/ball-battles/](https://wwbt-blog.ru/sandbox/ball-battles/).
+
 ## Preview
 
 <img src="assets/gameplay.png" alt="Ball Battles gameplay screenshot" width="430">
